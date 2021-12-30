@@ -1,5 +1,6 @@
 import MurderBot from './bots/murderbot'
 import EnigmaBot from './bots/enigmabot'
+import NotWorthItBot from './bots/notWorthItBot'
 import config from './config'
 
 let forceStartFlag = false
@@ -10,6 +11,7 @@ let socket
 const BOT_MAP = {
 	"MurderBot": MurderBot,
 	"EnigmaBot": EnigmaBot,
+	"NotWorthItBot": NotWorthItBot,
 }
 
 const COLOR_MAP = [
@@ -123,7 +125,6 @@ const successMessages = [
 	'SKYNET ONLINE.',
 	'YOU SHOULD HAVE TAKEN THE BLUE PILL.',
 ]
-
 
 function sendVoiceLine (messageType) {
 	let lines
@@ -268,7 +269,16 @@ function update (rawData) {
 
 			game.myScore = {...score, lostArmies, lostTerritory}
 		} else if (!score.dead) {
-			game.opponents[score.i] = {color: COLOR_MAP[score.color], dead: score.dead, tiles: score.tiles, total: score.total, availableArmies: (score.total-score.tiles)}
+			let gatherableArmies = score.total
+			let landSetsOfFifty = Math.floor(score.tiles/50)
+			// adjust for each set of 50 land (1*50+2*50+3*50)
+			// for every 50 moves to gather onother army is added to the land that wont be gathered.
+			for(let i = landSetsOfFifty; i>0; i--) {
+				gatherableArmies = gatherableArmies - (50 * i)
+			}
+			// adjust for remaining land
+			gatherableArmies = gatherableArmies = (score.tiles%50)*(landSetsOfFifty+1)
+			game.opponents[score.i] = {color: COLOR_MAP[score.color], dead: score.dead, tiles: score.tiles, total: score.total, availableArmies: (score.total-score.tiles), gatherableArmies: gatherableArmies}
 
 			if (game.opponents[score.i] && game.generals[score.i] !== -1) {
 				if (game.opponents[score.i].generalLocationIndex !== game.generals[score.i]) {

@@ -18,6 +18,8 @@ const ai = {
     attackQueue: [],
     opponents: [],
     myScore: {total: 0, tiles: 0, lostArmies: false, lostTerritory: false},
+    myGeneral : {},
+    distanceMapFromGeneral : [],
     myTopArmies: [], // The map locations we own and have a minimum number of armies available.
     emptyTerritories: [], // The map locations we can see that are free to conquer.
     foggedTerritories: [],
@@ -66,7 +68,7 @@ const ai = {
     if (this.game.intel.attackQueue.length > 0 ) {
       const nextAttacker = this.makeLocationObject(this.game.intel.attackQueue[0].attackerIndex)
       const nextTarget = this.makeLocationObject(this.game.intel.attackQueue[0].targetIndex)
-      if (!nextAttacker.isMine || nextAttacker.armies < 2 || (nextAttacker.armies-1 <= nextTarget.armies && this.game.intel.attackQueue[0].priority < 10)) {
+      if (!nextAttacker.isMine || nextAttacker.armies < 2 || (nextAttacker.armies-1 <= nextTarget.armies && !nextTarget.isMine && this.game.intel.attackQueue[0].priority < 10)) {
         this.game.intel.attackQueue = []
       }
     }
@@ -173,7 +175,6 @@ const ai = {
    * This creates a follow back to source priority
    * @param availableArmies - (recommended sorted largest to smallest)
    */
-
   queueEasyWins(availableArmies) {
     for(let i = 0; i<availableArmies.length; i++) {
       const neighbors = this.findNeighbors(availableArmies[i]).sort((a, b) => {
@@ -243,6 +244,10 @@ const ai = {
     for (let i = 0; i < neighborLocation.length; i++) {
       if (distanceMap[neighborLocation[i].idx] < distanceMap[chosenPath.idx]) {
         chosenPath = neighborLocation[i]
+      } else if(distanceMap[neighborLocation[i].idx] === distanceMap[chosenPath.idx]
+        && this.getArmyAttackDiff(lastInPath, neighborLocation[i]) > this.getArmyAttackDiff(lastInPath, chosenPath) ) {
+        // prioritize path that gathers the best
+        chosenPath = neighborLocation[i]
       }
     }
     if (chosenPath !== lastInPath) {
@@ -251,6 +256,16 @@ const ai = {
     }
     // create path from target
     return path
+  },
+
+  getArmyAttackDiff: function (attacker, target) {
+    let diff
+    if(attacker.terrain === target.terrain) {
+      diff = attacker.armies + (target.armies - 1)
+    } else {
+      diff = attacker.armies - target.armies - 1
+    }
+    return diff
   },
 
   createDistanceMap: function (location) {
@@ -332,6 +347,8 @@ const ai = {
     // sort() so that our largest army will be at the front of the array.
     this.game.intel.myArmies = this.game.intel.locations.filter((location) => location.isMine).sort((a, b) => b.armies - a.armies)
     this.game.intel.myTopArmies = this.game.intel.locations.filter((location) => location.isMine && location.armies >= USEFUL_ARMY_THRESHOLD).sort((a, b) => b.armies - a.armies)
+    this.game.intel.myGeneral = this.makeLocationObject(this.game.myGeneralLocationIndex)
+    this.game.intel.distanceMapFromGeneral = this.createDistanceMap(this.game.intel.myGeneral)
   },
 
   makeLocationObject(locationIdx){
@@ -343,7 +360,8 @@ const ai = {
       isMine: terrain === this.game.playerIndex,
       attackable: terrain === TERRAIN_EMPTY || (terrain > TERRAIN_EMPTY && terrain !== this.game.playerIndex),
       isCity: this.game.knownCities.includes(locationIdx),
-      isGeneral: this.game.opponents.some(opponent => opponent.generalLocationIndex && opponent.generalLocationIndex === locationIdx && !opponent.dead)
+      isGeneral: this.game.opponents.some(opponent => opponent.generalLocationIndex && opponent.generalLocationIndex === locationIdx && !opponent.dead),
+      distanceFromGeneral: this.game.intel.distanceMapFromGeneral[locationIdx]
     }
   },
 
@@ -358,7 +376,6 @@ const ai = {
       priority: priority || 0
     }
   }
-
 }
 
 export default ai
