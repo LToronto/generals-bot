@@ -30,7 +30,9 @@ let ai = {
 
   init: function (game) {
     this.game = game;
-  }, /**
+  },
+
+  /**
    * Taking all game data into account, plan and execute moves.
    * @param {*} game - The game state that we determine actions from.
    */
@@ -84,7 +86,7 @@ let ai = {
             target: neighbors[n],
             priority: 100
           }))
-          return //Only queue one for each attacker
+          break //Only queue one for each attacker
         }
       }
     }
@@ -116,13 +118,26 @@ let ai = {
             sendHalf: nextAttacker.armies/2 > neighbors[n].armies+1,
             priority: 1
           }))
-          return //Only queue one for each attacker
+          break //Only queue one for each attacker
         }
       }
     }
 
+    // TODO only do this if player is not ahead of close.
     if (this.game.intel.attackQueue.length < 1) {
       this.queueEasyWins(this.game.intel.myTopArmies)
+    }
+
+    // TODO only do this if player is not ahead of close.
+    // Don't queue up new stuff if there is stuff to do.
+    if (this.game.intel.attackQueue.length < 1 && this.game.intel.visibleOpponentTerritories.length > 0) {
+      // move largest army to random enemy Territory
+      const random = Math.floor(Math.random() * this.game.intel.visibleOpponentTerritories.length);
+      let attacker = this.game.intel.myArmies[0] // largest army
+      let target = this.game.intel.visibleOpponentTerritories[random]
+      if(attacker.armies > target.armies+1) {
+        this.queuePathToTarget(attacker, target, "AttackBoarder")
+      }
     }
 
     // Don't queue up new stuff if there is stuff to do.
@@ -291,13 +306,6 @@ let ai = {
     this.game.intel.myTopArmies = [];
     this.game.intel.totalAvailableArmyPower = 0;
 
-    // Add to the list of discovered cities
-    this.game.cities.forEach((cityLocationIndex) => {
-      if(!this.game.intel.discoveredCities.includes(cityLocationIndex)) {
-        this.game.intel.discoveredCities.push(cityLocationIndex)
-      }
-    })
-
     // Loop through map array once, and sort all data appropriately.
     //const row = Math.floor(idx / this.game.mapWidth);
     //const col = idx % this.game.mapWidth;
@@ -335,7 +343,7 @@ let ai = {
       terrain: terrain,
       isMine: terrain === this.game.playerIndex,
       attackable: terrain === TERRAIN_EMPTY || (terrain > TERRAIN_EMPTY && terrain !== this.game.playerIndex),
-      isCity: this.game.intel.discoveredCities.includes(locationIdx),
+      isCity: this.game.knownCities.includes(locationIdx),
       isGeneral: this.game.opponents.some(opponent => opponent.generalLocationIndex && opponent.generalLocationIndex === locationIdx && !opponent.dead)
     }
   },
