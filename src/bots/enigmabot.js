@@ -137,7 +137,7 @@ const ai = {
       const random = Math.floor(Math.random() * this.game.intel.visibleOpponentTerritories.length);
       const attacker = this.game.intel.myArmies[0] // largest army
       const target = this.game.intel.visibleOpponentTerritories[random]
-      if(attacker.armies > target.armies+1) {
+      if(attacker && attacker.armies > target.armies+1) {
         this.queuePathToTarget(attacker, target, "AttackBoarder")
       }
     }
