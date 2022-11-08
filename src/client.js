@@ -270,7 +270,7 @@ function update (rawData) {
 			game.myScore = {...score, lostArmies, lostTerritory}
 		} else if (!score.dead) {
 			let gatherableArmies = score.total
-			let landSetsOfFifty = Math.floor(score.tiles/50)
+			const landSetsOfFifty = Math.floor(score.tiles/50)
 			// adjust for each set of 50 land (1*50+2*50+3*50)
 			// for every 50 moves to gather onother army is added to the land that wont be gathered.
 			for(let i = landSetsOfFifty; i>0; i--) {
