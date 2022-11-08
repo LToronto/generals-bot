@@ -1,5 +1,5 @@
 import React, { lazy, Suspense } from "react";
-import { Grommet } from "grommet";
+import { Grommet, grommet } from "grommet";
 import {
   BrowserRouter as Router,
   Switch,
@@ -7,7 +7,6 @@ import {
   Redirect
 } from "react-router-dom";
 import Header from "./components/Header";
-import theme from "./theme";
 
 const Home = lazy(() => import("./pages/Home"));
 const Play = lazy(() => import("./pages/Play"));
@@ -15,7 +14,7 @@ const Test = lazy(() => import("./pages/Test"));
 
 function App() {
   return (
-    <Grommet theme={theme}>
+    <Grommet theme={grommet}>
       <Suspense fallback="Sloading...">
         <Router>
           <Header />
