@@ -39,7 +39,7 @@ export function ForceStart () {
 
 export function Join (userID, username) {
 	document.getElementById("log").innerHTML = "Connected to lobby: " + config.GAME_ID
-	console.log('Joined custom game at http://bot.generals.io/games/' + encodeURIComponent(config.GAME_ID))
+	document.getElementById("log").append(`Joined custom game at http://bot.generals.io/games/${encodeURIComponent(config.GAME_ID)}`)
 	socket.emit('join_private', config.GAME_ID, userID)
 
 	// When you're ready, you can have your bot join other game modes.
@@ -161,9 +161,18 @@ socket.on('game_won', () => {
 	sendVoiceLine('SUCCESS')
 	Quit()
 })
-
-socket.on("game_start", function(rawData) {
-  document.getElementById("log").innerHTML = "Game starting..."
+/**
+ * @startData.playerIndex    - A nonnegative integer used to identify the player in all data related to this game.
+ * @startData.replay_id      - The replay id for this game. Used to watch the replay after the game.
+ * @startData.chat_room      - A string used to send and receive messages during this game.
+ * @startData.team_chat_room - A string used to send and receive team chat messages during this game, if applicable.
+ * @startData.usernames      - An array of usernames of players, ordered by each player's {playerIndex}.
+ * @startData.teams          - An array of team affiliations of players, if applicable. Ordered by {playerIndex}. If not supplied, each player is
+ * on their own team (meaning the game is a free-for-all).
+ */
+socket.on("game_start", function(startData) {
+	// TODO: Take teammates from startData.teams into account & keep separate from opponents
+  document.getElementById("log").append(`\nGame starting...`)
 	// Initialize/Re-initialize game state used by both bot and client.
 	game = {
 		socket,
@@ -182,20 +191,24 @@ socket.on("game_start", function(rawData) {
 		playerIndex: null,
 		opponents: [],
 		team: null,
+		teams: null,
 		turn: 0,
 		gameOver: false,
 		replay_url: null,
 		usernames: [], // Ordered by playerIndex
 	}
 
-	game.playerIndex = rawData.playerIndex
+	game.playerIndex = startData.playerIndex
 
-  game.replay_url =
-    "http://bot.generals.io/replays/" + encodeURIComponent(rawData.replay_id)
-  console.log("Game starting! The replay will be available after the game at " + game.replay_url)
-	game.team = rawData.teams[rawData.playerIndex]
-	game.usernames = rawData.usernames
-	game.chatRoom = rawData.chat_room
+  game.replay_url = "http://bot.generals.io/replays/" + encodeURIComponent(startData.replay_id)
+	document.getElementById("log").append(`\nGame starting! The replay will be available after the game at ${game.replay_url}`)
+	game.teams = startData.teams
+	game.team = startData.teams[startData.playerIndex]
+
+	const startDataString = JSON.stringify(startData.teams)
+	document.getElementById("log").append(`\nteams: ${startDataString}`)
+	game.usernames = startData.usernames
+	game.chatRoom = startData.chat_room
 
 	sendVoiceLine('START')
 
@@ -232,17 +245,29 @@ function patch (old, diff) {
   }
   return out
 }
-
-socket.on("game_update", function(rawData) {
+/**
+ * @UpdataData.turn        - An integer representing what turn the game is on. Note that this value increments at a rate of 2/sec, whereas the turn
+ * counter in-game increments at 1/sec.
+ * @updateData.map_diff    - A patch representing the diff between the current map state and the last map state. See "Handling Game Updates" in the
+ * tutorial for details on applying the patch.
+ * @updateData.cities_diff -  except for the array of currently visible cities
+ * @updateData.generals    - An array of generals ordered by {playerIndex} (if you don't know what that is, see ). Each element is an integer
+ * representing the index of that general, where index 0 is the top left corner. Generals that aren't visible are marked by a -1.
+ * @updateData.scores      - An array of objects representing the current scores (# tiles, total army) of each player. Each object has a field named
+ * {i} that contains the {playerIndex} of the player corresponding to the score object.
+ * @updateData.stars       - An array of star ratings of players ordered by {playerIndex} . The array may be incomplete to begin with. This field
+ * will be included in game updates until the entire array is complete. Thus, you should only use the last instance of this array received.
+ */
+socket.on("game_update", function(updateData) {
   // Patch the city and map diffs into our local variables.
-  game.map = patch(game.map, rawData.map_diff)
-  game.cities = patch(game.cities, rawData.cities_diff) // TODO: keep a history of known city locations.
-	game.myGeneralLocationIndex = rawData.generals[game.playerIndex]
+  game.map = patch(game.map, updateData.map_diff)
+  game.cities = patch(game.cities, updateData.cities_diff) // TODO: keep a history of known city locations.
+	game.myGeneralLocationIndex = updateData.generals[game.playerIndex]
 	game.generals[game.playerIndex] = -1 // Remove our own general from the list, to avoid confusion.
 
 	// Keep track of general locations, if discovered, even if no longer visible.
-	for (let idx = 0; idx < rawData.generals.length; idx++) {
-		const generalLocation = rawData.generals[idx]
+	for (let idx = 0; idx < updateData.generals.length; idx++) {
+		const generalLocation = updateData.generals[idx]
 
 		if (generalLocation > -1 && (!game.generals || game.generals[idx] !== -1)) { // We may need to track whether the player is still alive, as well
 			game.generals[idx] = generalLocation
@@ -263,16 +288,13 @@ socket.on("game_update", function(rawData) {
 	 * scores data format: [{total, tiles, i, color, dead}]
 	 * Populates game.opponents array with scoreboard details for living opponents and undefined for dead players.
 	 */
-	rawData.scores.map((score) => {
-		// TODO: Take teammates from rawData.teams into account & keep separate from opponents
+	updateData.scores.map((score) => {
 		if (score.i === game.playerIndex) {
 			const lostArmies = (game.myScore.total >= score.total) ? true : false
 			const lostTerritory = (game.myScore.tiles < score.tiles) ? true : false
 
 			game.myScore = {...score, lostArmies, lostTerritory}
 		} else if (!score.dead) {
-			game.opponents[score.i] = {color: COLOR_MAP[score.color], dead: score.dead, tiles: score.tiles, total: score.total, availableArmies: (score.total-score.tiles)}
-
 			let gatherableArmies = score.total
 			let landSetsOfFifty = Math.floor(score.tiles/50)
 			// adjust for each set of 50 land (1*50+2*50+3*50)
@@ -282,8 +304,15 @@ socket.on("game_update", function(rawData) {
 			}
 			// adjust for remaining land
 			gatherableArmies = gatherableArmies = (score.tiles%50)*(landSetsOfFifty+1)
-			game.opponents[score.i] = {color: COLOR_MAP[score.color], dead: score.dead, tiles: score.tiles, total: score.total, availableArmies: (score.total-score.tiles), gatherableArmies: gatherableArmies}
-
+			game.opponents[score.i] = {
+				color: COLOR_MAP[score.color],
+				dead: score.dead,
+				tiles: score.tiles,
+				total: score.total,
+				availableArmies: (score.total-score.tiles),
+				gatherableArmies: gatherableArmies,
+				isTeam: game.teams[score.i] === game.team
+			}
 
 			if (game.opponents[score.i] && game.generals[score.i] !== -1) {
 				if (game.opponents[score.i].generalLocationIndex !== game.generals[score.i]) {
@@ -322,7 +351,7 @@ socket.on("game_update", function(rawData) {
 		return game.terrain[cityLocationIndex] !== game.playerIndex
 	}) // Remove self-owned cities from city list.
 
-	game.turn = rawData.turn
+	game.turn = updateData.turn
 
 	ai.move()
 })

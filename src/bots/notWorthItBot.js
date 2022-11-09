@@ -48,7 +48,7 @@ let ai = {
       // AS LONG AS FOREIGN POLICY DOES NOT DRAMATICALLY CHANGE, WORK THROUGH FIFO QUEUE OF MOVES
       let currentMove = this.game.intel.attackQueue.shift()
       let moveInfo = `TURN ${this.game.turn}: ${currentMove.mode}: ${currentMove.attackerIndex} --> ${currentMove.targetIndex} ${(currentMove.sendHalf) ? ' (HALF)' : ''}`
-      console.log(moveInfo)
+      document.getElementById("log").append(`\n${moveInfo}`)
       this.game.intel.log.unshift({mode: currentMove.mode, attackerIndex: currentMove.attackerIndex, targetIndex: currentMove.targetIndex}) // push to front of log array--returns new length
       this.game.intel.log.length = 5
       this.game.socket.emit("attack", currentMove.attackerIndex, currentMove.targetIndex, currentMove.sendHalf)
@@ -214,7 +214,8 @@ let ai = {
 
   getArmyAttackDiff: function (attacker, target) {
     let diff
-    if(attacker.terrain === target.terrain) {
+    // same player or same team
+    if(attacker.terrain === target.terrain || this.game.teams[attacker.terrain] === this.game.teams[target.terrain]) {
       diff = attacker.armies + (target.armies - 1)
     } else {
       diff = attacker.armies - target.armies - 1
@@ -290,7 +291,7 @@ let ai = {
 
     this.game.intel.emptyTerritories = this.game.intel.locations.filter((location) => location.terrain === TERRAIN_EMPTY)
     this.game.intel.foggedTerritories = this.game.intel.locations.filter((location) => location.terrain === TERRAIN_FOG)
-    this.game.intel.visibleOpponentTerritories = this.game.intel.locations.filter((location) => location.terrain > TERRAIN_EMPTY && location.terrain !== this.game.playerIndex)
+    this.game.intel.visibleOpponentTerritories = this.game.intel.locations.filter((location) => location.terrain > TERRAIN_EMPTY && location.terrain !== this.game.playerIndex && this.game.teams[location.terrain] !== this.game.team)
     // sort() so that our largest army will be at the front of the array.
     this.game.intel.myArmies = this.game.intel.locations.filter((location) => location.isMine).sort((a, b) => b.armies - a.armies)
     this.game.intel.myTopArmies = this.game.intel.locations.filter((location) => location.isMine && location.armies >= USEFUL_ARMY_THRESHOLD).sort((a, b) => b.armies - a.armies)
@@ -305,7 +306,8 @@ let ai = {
       armies: this.game.armies[locationIdx],
       terrain: terrain,
       isMine: terrain === this.game.playerIndex,
-      attackable: terrain === TERRAIN_EMPTY || (terrain > TERRAIN_EMPTY && terrain !== this.game.playerIndex),
+      isTeam: this.game.teams[terrain] === this.game.team,
+      attackable: terrain === TERRAIN_EMPTY || (terrain > TERRAIN_EMPTY && terrain !== this.game.playerIndex && this.game.teams[terrain] !== this.game.team),
       isCity: this.game.knownCities.includes(locationIdx),
       isGeneral: this.game.opponents.some(opponent => opponent.generalLocationIndex && opponent.generalLocationIndex === locationIdx && !opponent.dead),
       distanceFromGeneral: this.game.intel.distanceMapFromGeneral[locationIdx]

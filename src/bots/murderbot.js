@@ -101,7 +101,7 @@ let ai = {
 		// MURDER: If we know an enemy general's location, attack if we have the troops to succeed.
 		// TODO: Pick the most vulnerable opponent, and indicate which, like "MURDER: RED"
 		this.game.generals.forEach((enemyGeneralLocationIndex, playerIndex) => {
-			if (enemyGeneralLocationIndex > -1 && this.game.opponents[playerIndex]) {
+			if (enemyGeneralLocationIndex > -1 && this.game.opponents[playerIndex] && this.game.teams[playerIndex] !== this.game.team) {
 
 				// const opponent = this.game.opponents[playerIndex];
 				// const maximumOpponentPower = opponent.total - opponent.tiles;
@@ -499,7 +499,7 @@ let ai = {
 					}
 					this.game.intel.totalAvailableArmyPower += this.game.armies[idx];
 				}
-			} else if (this.game.terrain[idx] > TERRAIN_EMPTY && this.game.terrain[idx] !== this.game.playerIndex) {
+			} else if (this.game.terrain[idx] > TERRAIN_EMPTY && this.game.terrain[idx] !== this.game.playerIndex && this.game.teams[this.game.terrain[idx]] !== this.game.team) {
 				this.game.intel.undiscovered = false;
 				this.game.intel.visibleOpponentTerritories.push(idx);
 			}
@@ -647,13 +647,13 @@ let ai = {
 				// 	targetIndex = spaceInfo.west.locationIndex;
 				// }
 				// Prioritize opponent-owned attackable neighboring spaces.
-				if (spaceInfo.north && spaceInfo.north.locationTerrain !== this.game.playerIndex && spaceInfo.locationPower > spaceInfo.north.locationPower && !this.spaceIsInRecentHistory(spaceInfo.north.locationIndex)) {
+				if (spaceInfo.north && spaceInfo.north.locationTerrain !== this.game.playerIndex && this.game.teams[spaceInfo.north.locationTerrain] !== this.game.team && spaceInfo.locationPower > spaceInfo.north.locationPower && !this.spaceIsInRecentHistory(spaceInfo.north.locationIndex)) {
 					targetIndex = spaceInfo.north.locationIndex;
-				} else if (spaceInfo.east && spaceInfo.east.locationTerrain !== this.game.playerIndex && spaceInfo.locationPower > spaceInfo.east.locationPower && !this.spaceIsInRecentHistory(spaceInfo.east.locationIndex)) {
+				} else if (spaceInfo.east && spaceInfo.east.locationTerrain !== this.game.playerIndex && this.game.teams[spaceInfo.east.locationTerrain] !== this.game.team && spaceInfo.locationPower > spaceInfo.east.locationPower && !this.spaceIsInRecentHistory(spaceInfo.east.locationIndex)) {
 					targetIndex = spaceInfo.east.locationIndex;
-				} else if (spaceInfo.south && spaceInfo.south.locationTerrain !== this.game.playerIndex && spaceInfo.locationPower > spaceInfo.south.locationPower && !this.spaceIsInRecentHistory(spaceInfo.south.locationIndex)) {
+				} else if (spaceInfo.south && spaceInfo.south.locationTerrain !== this.game.playerIndex && this.game.teams[spaceInfo.south.locationTerrain] !== this.game.team && spaceInfo.locationPower > spaceInfo.south.locationPower && !this.spaceIsInRecentHistory(spaceInfo.south.locationIndex)) {
 					targetIndex = spaceInfo.south.locationIndex;
-				} else if (spaceInfo.west && spaceInfo.west.locationTerrain !== this.game.playerIndex && spaceInfo.locationPower > spaceInfo.west.locationPower && !this.spaceIsInRecentHistory(spaceInfo.west.locationIndex)) {
+				} else if (spaceInfo.west && spaceInfo.west.locationTerrain !== this.game.playerIndex && this.game.teams[spaceInfo.west.locationTerrain] !== this.game.team && spaceInfo.locationPower > spaceInfo.west.locationPower && !this.spaceIsInRecentHistory(spaceInfo.west.locationIndex)) {
 					targetIndex = spaceInfo.west.locationIndex;
 				}
 				break;
