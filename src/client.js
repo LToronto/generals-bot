@@ -39,7 +39,7 @@ export function ForceStart () {
 
 export function Join (userID, username) {
 	document.getElementById("log").innerHTML = "Connected to lobby: " + config.GAME_ID
-	document.getElementById("log").append(`Joined custom game at http://bot.generals.io/games/${encodeURIComponent(config.GAME_ID)}`)
+	document.getElementById("log").append(`\nJoined custom game at http://bot.generals.io/games/${encodeURIComponent(config.GAME_ID)}`)
 	socket.emit('join_private', config.GAME_ID, userID)
 
 	// When you're ready, you can have your bot join other game modes.
@@ -57,7 +57,7 @@ export function Join (userID, username) {
 
 export function Quit () {
 	document.getElementById("log").append("\nReplay:\n" + game.replay_url)
-	console.log("Game over. Halting execution until next game begin.")
+	document.getElementById("log").append("\nGame over. Halting execution until next game begin.")
 	game.gameOver = true
 	forceStartFlag = false
 	socket.emit('leave_game') // Leave active game
