@@ -1,13 +1,10 @@
+import {createDistanceMap, findPath, findNeighbors, makeLocationObject, makeAttackQueueObject} from './botUtils'
+import {TERRAIN_EMPTY, TERRAIN_FOG} from './botUtils'
 /**
  * This bot randomly moves its largest army to a random foggy location
  *
  */
 const OPENING_FIRST_MOVE_THRESHOLD = 24  //24 game ticks = 12 armies
-
-const TERRAIN_EMPTY = -1 // empty or city or enemy
-// const TERRAIN_MTN = -2
-const TERRAIN_FOG = -3  //empty or swamp or occupied
-// const TERRAIN_FOG_MTN = -4 //city or mnt
 const USEFUL_ARMY_THRESHOLD = 2
 
 const ai = {
@@ -67,8 +64,8 @@ const ai = {
 
     // Clear the queue if the next action no longer makes sense
     if (this.game.intel.attackQueue.length > 0 ) {
-      const nextAttacker = this.makeLocationObject(this.game.intel.attackQueue[0].attackerIndex)
-      const nextTarget = this.makeLocationObject(this.game.intel.attackQueue[0].targetIndex)
+      const nextAttacker = makeLocationObject({ locationIdx : this.game.intel.attackQueue[0].attackerIndex, game : this.game })
+      const nextTarget = makeLocationObject({ locationIdx : this.game.intel.attackQueue[0].targetIndex, game : this.game })
       if (!nextAttacker.isMine || nextAttacker.armies < 2 || (nextAttacker.armies-1 <= nextTarget.armies && !nextTarget.isMine && this.game.intel.attackQueue[0].priority < 10)) {
         this.game.intel.attackQueue = []
       }
@@ -76,13 +73,13 @@ const ai = {
 
     // Take the general instead of current action
     if (this.game.intel.attackQueue.length > 0 && this.game.intel.attackQueue[0].priority < 100) {
-      const nextAttacker = this.makeLocationObject(this.game.intel.attackQueue[0].attackerIndex)
-      const neighbors = this.findNeighbors(nextAttacker)
+      const nextAttacker = makeLocationObject({locationIdx : this.game.intel.attackQueue[0].attackerIndex, game : this.game})
+      const neighbors = findNeighbors({location : nextAttacker, game : this.game})
       for(let n = 0; n<neighbors.length; n++) {
         if(neighbors[n].attackable && nextAttacker.armies > neighbors[n].armies+1 && neighbors[n].isGeneral) {
           //Clear the queue and make this the thing to do
           this.game.intel.attackQueue = []
-          this.game.intel.attackQueue.push(this.makeAttackQueueObject({
+          this.game.intel.attackQueue.push(makeAttackQueueObject({
             mode: "oopsIFoundYou",
             attacker: nextAttacker,
             target: neighbors[n],
@@ -107,13 +104,13 @@ const ai = {
 
     // Check current low priority attacker and take the city instead of current action
     if (this.game.intel.attackQueue.length > 0 && this.game.intel.attackQueue[0].priority < 1) {
-      const nextAttacker = this.makeLocationObject(this.game.intel.attackQueue[0].attackerIndex)
-      const neighbors = this.findNeighbors(nextAttacker)
+      const nextAttacker = makeLocationObject({ locationIdx : this.game.intel.attackQueue[0].attackerIndex, game : this.game })
+      const neighbors = findNeighbors({ location :nextAttacker, game : this.game })
       for(let n = 0; n<neighbors.length; n++) {
         if(neighbors[n].attackable && nextAttacker.armies > neighbors[n].armies+1 && neighbors[n].isCity) {
           //Clear the queue and make this the thing to do
           this.game.intel.attackQueue = []
-          this.game.intel.attackQueue.push(this.makeAttackQueueObject({
+          this.game.intel.attackQueue.push(makeAttackQueueObject({
             mode: "CityPriority",
             attacker: nextAttacker,
             target: neighbors[n],
@@ -157,10 +154,10 @@ const ai = {
     }
   },
 
-  queuePathToTarget(attacker, target, mode, priority){
-    const nextMoveLocations = this.findPath(attacker, target)
+  queuePathToTarget: function(attacker, targetLocation, mode, priority){
+    const nextMoveLocations = findPath({location: attacker, targetLocation, game : this.game})
     for (let i = nextMoveLocations.length - 1; i > 0; i--) {
-      this.game.intel.attackQueue.push(this.makeAttackQueueObject({
+      this.game.intel.attackQueue.push(makeAttackQueueObject({
         mode: mode || "SelectedPathToTarget",
         attacker: nextMoveLocations[i],
         target: nextMoveLocations[i - 1],
@@ -176,9 +173,9 @@ const ai = {
    * This creates a follow back to source priority
    * @param availableArmies (recommended sorted largest to smallest)
    */
-  queueEasyWins(availableArmies) {
+  queueEasyWins: function(availableArmies) {
     for(let i = 0; i<availableArmies.length; i++) {
-      const neighbors = this.findNeighbors(availableArmies[i]).sort((a, b) => {
+      const neighbors = findNeighbors({ location : availableArmies[i], game : this.game }).sort((a, b) => {
         let result = a.isCity
         if(!result) {
           result = a.armies - b.armies
@@ -187,7 +184,7 @@ const ai = {
       })
       for(let n = 0; n<neighbors.length; n++) {
         if(neighbors[n].attackable && availableArmies[i].armies > neighbors[n].armies+1) {
-          this.game.intel.attackQueue.push(this.makeAttackQueueObject({
+          this.game.intel.attackQueue.push(makeAttackQueueObject({
             mode: "EasyWin",
             attacker: availableArmies[i],
             target: neighbors[n]
@@ -196,104 +193,6 @@ const ai = {
         }
       }
     }
-  },
-
-  findNeighbors(location) {
-    const row = Math.floor(location.idx / this.game.mapWidth)
-    const col = location.idx % this.game.mapWidth
-    const neighbors = []
-    if (this.intel.map[row - 1] && this.intel.map[row - 1][col]) {
-      neighbors.push(this.makeLocationObject((row - 1) * this.game.mapWidth + col))
-    }
-    if (this.intel.map[row + 1] && this.intel.map[row + 1][col]) {
-      neighbors.push(this.makeLocationObject((row + 1) * this.game.mapWidth + col))
-    }
-    if (this.intel.map[row] && this.intel.map[row][col - 1]) {
-      neighbors.push(this.makeLocationObject(row * this.game.mapWidth + (col - 1)))
-    }
-    if (this.intel.map[row] && this.intel.map[row][col + 1]) {
-      neighbors.push(this.makeLocationObject(row * this.game.mapWidth + (col + 1)))
-    }
-    return neighbors
-  },
-
-  findPath: function (location, targetLocation) {
-    targetLocation = typeof targetLocation == "number" ? this.makeLocationObject(targetLocation) : targetLocation
-    location = typeof target == "number" ? this.makeLocationObject(location) : location
-    // TODO avoid cities option
-    let pathIndexes = []
-    if (location && targetLocation) {
-      const distanceMap = this.createDistanceMap(location)
-      pathIndexes = this.findShortestPath(distanceMap, targetLocation)
-      document.getElementById("log").append(`\nNew Path: + ${JSON.stringify(pathIndexes)}`)
-    }
-    return pathIndexes
-  },
-
-  findShortestPath: function (distanceMap, targetLocationOrPath) {
-    let path = []
-    if (Array.isArray(targetLocationOrPath)) {
-      path = targetLocationOrPath
-    } else {
-      path.push(targetLocationOrPath)
-    }
-    const lastInPath = path[path.length - 1]
-    // Map Path Distance
-    const neighborLocation = this.findNeighbors(lastInPath)
-    let chosenPath = lastInPath
-    //TODO prioritize better gathering
-    for (let i = 0; i < neighborLocation.length; i++) {
-      if (distanceMap[neighborLocation[i].idx] < distanceMap[chosenPath.idx]) {
-        chosenPath = neighborLocation[i]
-      } else if(distanceMap[neighborLocation[i].idx] === distanceMap[chosenPath.idx]
-        && this.getArmyAttackDiff(lastInPath, neighborLocation[i]) > this.getArmyAttackDiff(lastInPath, chosenPath) ) {
-        // prioritize path that gathers the best
-        chosenPath = neighborLocation[i]
-      }
-    }
-    if (chosenPath !== lastInPath) {
-      path.push(chosenPath)
-      path = this.findShortestPath(distanceMap, path)
-    }
-    // create path from target
-    return path
-  },
-
-  getArmyAttackDiff: function (attacker, target) {
-    let diff
-    // same player or same team
-    if(attacker.terrain === target.terrain || this.game.teams[attacker.terrain] === this.game.teams[target.terrain]) {
-      diff = attacker.armies + (target.armies - 1)
-    } else {
-      diff = attacker.armies - target.armies - 1
-    }
-    return diff
-  },
-
-  createDistanceMap: function (location) {
-    const distanceMap = []
-    const queue = [location]
-    distanceMap[location.idx] = 0
-    //TODO account for cities that are fogged mountains
-    while (queue.length > 0) {
-      const currentLocation = queue.shift()
-      const currentDistance = distanceMap[currentLocation.idx]
-      if (currentDistance !== "M") {
-        const neighbors = this.findNeighbors(currentLocation)
-        for (let i = 0; i < neighbors.length; i++) {
-          if (typeof distanceMap[neighbors[i].idx] === 'undefined') {
-            queue.push(neighbors[i])
-            if (neighbors[i].terrain === TERRAIN_FOG || neighbors[i].terrain >= TERRAIN_EMPTY) {
-              distanceMap[neighbors[i].idx] = currentDistance + 1
-            } else {
-              distanceMap[neighbors[i].idx] = "M"
-            }
-          }
-        }
-      }
-    }
-
-    return distanceMap
   },
 
   /**
@@ -330,11 +229,11 @@ const ai = {
       this.intel.map[row] = []
       for (let column = 0; column <= (this.game.terrain.length - 1) % this.game.mapWidth; column++) {
         const idx = row * this.game.mapWidth + column
-        this.intel.map[row][column] = this.makeLocationObject(idx)
+        this.intel.map[row][column] = makeLocationObject({ locationIdx : idx, game : this.game })
       }
     }
     for (let idx = 0; idx < this.game.terrain.length; idx++) {
-      this.game.intel.locations[idx] = this.makeLocationObject(idx)
+      this.game.intel.locations[idx] = makeLocationObject({ locationIdx : idx, game : this.game })
       if (this.game.terrain[idx] === this.game.playerIndex) {
         this.game.intel.unexploredTerritories.delete(idx)
         if (this.game.armies[idx] > 1) {
@@ -349,36 +248,11 @@ const ai = {
     // sort() so that our largest army will be at the front of the array.
     this.game.intel.myArmies = this.game.intel.locations.filter((location) => location.isMine).sort((a, b) => b.armies - a.armies)
     this.game.intel.myTopArmies = this.game.intel.locations.filter((location) => location.isMine && location.armies >= USEFUL_ARMY_THRESHOLD).sort((a, b) => b.armies - a.armies)
-    this.game.intel.myGeneral = this.makeLocationObject(this.game.myGeneralLocationIndex)
-    this.game.intel.distanceMapFromGeneral = this.createDistanceMap(this.game.intel.myGeneral)
+    this.game.intel.myGeneral = makeLocationObject({ locationIdx : this.game.myGeneralLocationIndex, game : this.game })
+    this.game.intel.distanceMapFromGeneral = createDistanceMap({ location : this.game.intel.myGeneral, game : this.game })
   },
 
-  makeLocationObject(locationIdx){
-    const terrain = this.game.terrain[locationIdx]
-    return {
-      idx: locationIdx,
-      armies: this.game.armies[locationIdx],
-      terrain: terrain,
-      isMine: terrain === this.game.playerIndex,
-      isTeam: this.game.teams[terrain] === this.game.team,
-      attackable: terrain === TERRAIN_EMPTY || (terrain > TERRAIN_EMPTY && terrain !== this.game.playerIndex && this.game.teams[terrain] !== this.game.team),
-      isCity: this.game.knownCities.includes(locationIdx),
-      isGeneral: this.game.opponents.some(opponent => opponent.generalLocationIndex && opponent.generalLocationIndex === locationIdx && !opponent.dead),
-      distanceFromGeneral: this.game.intel.distanceMapFromGeneral[locationIdx]
-    }
-  },
 
-  makeAttackQueueObject({mode, attacker, target, sendHalf, priority}){
-    const attackerIndex = typeof attacker == "number" ? attacker : attacker.idx
-    const targetIndex = typeof target == "number" ? target : target.idx
-    return {
-      mode: mode || "notSet",
-      attackerIndex: attackerIndex,
-      targetIndex: targetIndex,
-      sendHalf: sendHalf || false,
-      priority: priority || 0
-    }
-  }
 }
 
 export default ai
