@@ -1,4 +1,4 @@
-import {createDistanceMap, findPath, findNeighbors, makeLocationObject, makeAttackQueueObject} from './botUtils'
+import {createDistanceMap, findPath, findNeighbors, getLocationObject, makeAttackQueueObject} from './botUtils'
 import {TERRAIN_EMPTY, TERRAIN_FOG} from './botUtils'
 /**
  * This bot expands and pulls all other armies back to the general
@@ -11,20 +11,11 @@ const USEFUL_ARMY_THRESHOLD = 2
 let ai = {
   game: undefined, // TODO: If we make the data arrays into sets, we don't have to worry about pushing repeat state, like known city locations
   intel: {
-    map: [],
-    locations: [],
     attackQueue: [],
-    opponents: [],
-    myScore: {total: 0, tiles: 0, lostArmies: false, lostTerritory: false},
     myGeneral : {},
     distanceMapFromGeneral : [],
     myTopArmies: [], // The map locations we own and have a minimum number of armies available.
-    emptyTerritories: [], // The map locations we can see that are free to conquer.
-    foggedTerritories: [],
-    visibleOpponentTerritories: [],
-    unexploredTerritories: [], // The set of remaining board indices we have not yet explored while searching for generals.
     log: Array(5), // Set up limited-length history, with turn info, foreign policy, and other important data to track over time.
-
   },
 
   init: function (game) {
@@ -33,21 +24,18 @@ let ai = {
 
   /**
    * Taking all game data into account, plan and execute moves.
-   * @param {*} game - The game state that we determine actions from.
    */
   move: function () {
-    this.game.intel = this.intel // Re-initialize intel
     this.determineIntel()
     this.determineMoves()
 
-    // while (this.game.intel.attackQueue.length) {
-    if (this.game.intel.attackQueue.length > 0) {
+    if (this.intel.attackQueue.length > 0) {
       // AS LONG AS FOREIGN POLICY DOES NOT DRAMATICALLY CHANGE, WORK THROUGH FIFO QUEUE OF MOVES
-      let currentMove = this.game.intel.attackQueue.shift()
+      let currentMove = this.intel.attackQueue.shift()
       let moveInfo = `TURN ${this.game.turn}: ${currentMove.mode}: ${currentMove.attackerIndex} --> ${currentMove.targetIndex} ${(currentMove.sendHalf) ? ' (HALF)' : ''}`
       document.getElementById("log").append(`\n${moveInfo}`)
-      this.game.intel.log.unshift({mode: currentMove.mode, attackerIndex: currentMove.attackerIndex, targetIndex: currentMove.targetIndex}) // push to front of log array--returns new length
-      this.game.intel.log.length = 5
+      this.intel.log.unshift({mode: currentMove.mode, attackerIndex: currentMove.attackerIndex, targetIndex: currentMove.targetIndex}) // push to front of log array--returns new length
+      this.intel.log.length = 5
       this.game.socket.emit("attack", currentMove.attackerIndex, currentMove.targetIndex, currentMove.sendHalf)
     }
   },
@@ -70,21 +58,21 @@ let ai = {
     }
 
     // Clear the queue if the next action no longer makes sense
-    if (this.game.intel.attackQueue.length > 0 ) {
-      let nextAttacker = makeLocationObject({locationIdx : this.game.intel.attackQueue[0].attackerIndex, game : this.game})
-      let nextTarget = makeLocationObject({locationIdx : this.game.intel.attackQueue[0].targetIndex, game : this.game})
+    if (this.intel.attackQueue.length > 0 ) {
+      let nextAttacker = getLocationObject({locationIdx : this.intel.attackQueue[0].attackerIndex, game : this.game})
+      let nextTarget = getLocationObject({locationIdx : this.intel.attackQueue[0].targetIndex, game : this.game})
       if (!nextAttacker.isMine || nextAttacker.armies < 2 || (nextAttacker.armies-1 <= nextTarget.armies && !nextTarget.isMine)) {
-        this.game.intel.attackQueue = []
+        this.intel.attackQueue = []
       }
     }
 
     //Easy wins
-    if (this.game.intel.attackQueue.length < 1) {
+    if (this.intel.attackQueue.length < 1) {
       let useArmies
       if (this.game.turn <= OPENING_GAME_TURN_THRESHOLD) {
-        useArmies = this.game.intel.myTopArmies
+        useArmies = this.intel.myTopArmies
       } else {
-        useArmies = this.game.intel.myTopArmies.filter((location) => location.idx !== this.game.intel.myGeneral.idx).sort((a, b) => b.armies - a.armies)
+        useArmies = this.intel.myTopArmies.filter((location) => location.idx !== this.intel.myGeneral.idx).sort((a, b) => b.armies - a.armies)
       }
       this.queueEasyWins(useArmies)
     }
@@ -92,17 +80,20 @@ let ai = {
     // find largest army
     // move to king
     // Don't queue up new stuff if there is stuff to do.
-    if (this.game.intel.attackQueue.length < 1) {
+    if (this.intel.attackQueue.length < 1) {
       // move largest army to random empty Territory
-      let aTopArmy = this.game.intel.myTopArmies.filter((location) => location.idx !== this.game.intel.myGeneral.idx).sort((a, b) => {
-          let result = a.isCity && a.armies > 24
-          if(!result) {
-            result = b.armies - a.armies || b.distanceFromGeneral - a.distanceFromGeneral
-          }
-          return result
+      let aTopArmy = this.intel.myTopArmies.filter((location) => location.idx !== this.intel.myGeneral.idx).sort((a, b) => {
+        let result = 0
+        if(!result) {
+          result = (b.armies-b.isCity*24) - (a.armies-a.isCity*24)
+        }
+        if(!result) {
+          result = this.intel.distanceMapFromGeneral[b.idx] - this.intel.distanceMapFromGeneral[a.idx]
+        }
+        return result
       }
       )[0]
-      this.queuePathToTarget(aTopArmy, this.game.intel.myGeneral, "GatherToGeneral", 20)
+      this.queuePathToTarget(aTopArmy, this.intel.myGeneral, "GatherToGeneral", 20)
     }
   },
 
@@ -125,7 +116,7 @@ let ai = {
       })
       for(let n = 0; n<neighbors.length; n++) {
         if(neighbors[n].attackable && availableArmies[i].armies > neighbors[n].armies+1) {
-          this.game.intel.attackQueue.push(makeAttackQueueObject({
+          this.intel.attackQueue.push(makeAttackQueueObject({
             mode: "EasyWin",
             attacker: availableArmies[i],
             target: neighbors[n]
@@ -139,7 +130,7 @@ let ai = {
   queuePathToTarget: function(attacker, targetLocation, mode, priority){
     const nextMoveLocations = findPath({location: attacker, targetLocation, game : this.game})
     for (let i = nextMoveLocations.length - 1; i > 0; i--) {
-      this.game.intel.attackQueue.push(makeAttackQueueObject({
+      this.intel.attackQueue.push(makeAttackQueueObject({
         mode: mode || "SelectedPathToTarget",
         attacker: nextMoveLocations[i],
         target: nextMoveLocations[i - 1],
@@ -150,52 +141,26 @@ let ai = {
 
   /**
    * Extract map state into actionable data.
-   * Locations with a -1 map to emptyTerritories.
    * Locations matching playerIndex and a count >= USEFUL_ARMY_THRESHOLD map to standingArmies.
    * Locations with a terrain index != playerIndex are enemy locations.
    */
   parseMap: function () {
 
-    if (this.game.turn === 1) {
-      this.game.intel.unexploredTerritories = new Set([...Array(this.game.mapSize).keys()])
-    }
+    this.intel.myTopArmies = []
+    this.intel.totalAvailableArmyPower = 0
 
-    this.game.intel.emptyTerritories = []
-    this.game.intel.foggedTerritories = []
-    this.game.intel.visibleOpponentTerritories = []
-    this.game.intel.myArmies = []
-    this.game.intel.myTopArmies = []
-    this.game.intel.totalAvailableArmyPower = 0
-
-    // Loop through map array once, and sort all data appropriately.
-    //const row = Math.floor(idx / this.game.mapWidth)
-    //const col = idx % this.game.mapWidth
-    //const index = row * this.game.mapWidth + col
-    for (let row = 0; row < Math.floor(this.game.terrain.length / this.game.mapWidth); row++) {
-      this.intel.map[row] = []
-      for (let column = 0; column <= (this.game.terrain.length - 1) % this.game.mapWidth; column++) {
-        let idx = row * this.game.mapWidth + column
-        this.intel.map[row][column] = makeLocationObject({locationIdx : idx, game : this.game})
-      }
-    }
     for (let idx = 0; idx < this.game.terrain.length; idx++) {
-      this.game.intel.locations[idx] = makeLocationObject({locationIdx : idx, game : this.game})
       if (this.game.terrain[idx] === this.game.playerIndex) {
-        this.game.intel.unexploredTerritories.delete(idx)
         if (this.game.armies[idx] > 1) {
-          this.game.intel.totalAvailableArmyPower += this.game.armies[idx] - 1
+          this.intel.totalAvailableArmyPower += this.game.armies[idx] - 1
         }
       }
     }
 
-    this.game.intel.emptyTerritories = this.game.intel.locations.filter((location) => location.terrain === TERRAIN_EMPTY)
-    this.game.intel.foggedTerritories = this.game.intel.locations.filter((location) => location.terrain === TERRAIN_FOG)
-    this.game.intel.visibleOpponentTerritories = this.game.intel.locations.filter((location) => location.terrain > TERRAIN_EMPTY && location.terrain !== this.game.playerIndex && this.game.teams[location.terrain] !== this.game.team)
-    // sort() so that our largest army will be at the front of the array.
-    this.game.intel.myArmies = this.game.intel.locations.filter((location) => location.isMine).sort((a, b) => b.armies - a.armies)
-    this.game.intel.myTopArmies = this.game.intel.locations.filter((location) => location.isMine && location.armies >= USEFUL_ARMY_THRESHOLD).sort((a, b) => b.armies - a.armies)
-    this.game.intel.myGeneral = makeLocationObject({locationIdx : this.game.myGeneralLocationIndex, game : this.game})
-    this.game.intel.distanceMapFromGeneral = createDistanceMap({location : this.game.intel.myGeneral, game : this.game})
+    this.intel.emptyTerritories = this.game.locations.filter((location) => location.terrain === TERRAIN_EMPTY)
+    this.intel.myTopArmies = this.game.locations.filter((location) => location.isMine && location.armies >= USEFUL_ARMY_THRESHOLD).sort((a, b) => b.armies - a.armies)
+    this.intel.myGeneral = getLocationObject({locationIdx : this.game.myGeneralLocationIndex, game : this.game})
+    this.intel.distanceMapFromGeneral = createDistanceMap({location : this.intel.myGeneral, game : this.game})
   }
 }
 

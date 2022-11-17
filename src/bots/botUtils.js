@@ -7,20 +7,23 @@ function findNeighbors({location, game}) {
   if (!game) {
     throw new Error("This function needs game context to work")
   }
-  const row = Math.floor(location.idx / game.mapWidth)
-  const col = location.idx % game.mapWidth
+  // accept location or locationIdx
+  location = typeof target == "number" ? location : location.idx
+  const row = Math.floor(location / game.mapWidth)
+  const col = location % game.mapWidth
   const neighbors = []
-  if (game.intel.map[row - 1] && game.intel.map[row - 1][col]) {
-    neighbors.push(makeLocationObject({locationIdx: (row - 1) * game.mapWidth + col, game}))
+  // Check not a map boundary and return all neighbors
+  if (game.locationObjectMap[row - 1] && game.locationObjectMap[row - 1][col]) {
+    neighbors.push(game.locationObjectMap[row - 1][col])
   }
-  if (game.intel.map[row + 1] && game.intel.map[row + 1][col]) {
-    neighbors.push(makeLocationObject({locationIdx: (row + 1) * game.mapWidth + col, game}))
+  if (game.locationObjectMap[row + 1] && game.locationObjectMap[row + 1][col]) {
+    neighbors.push(game.locationObjectMap[row + 1][col])
   }
-  if (game.intel.map[row] && game.intel.map[row][col - 1]) {
-    neighbors.push(makeLocationObject({locationIdx: row * game.mapWidth + (col - 1), game}))
+  if (game.locationObjectMap[row] && game.locationObjectMap[row][col - 1]) {
+    neighbors.push(game.locationObjectMap[row][col - 1])
   }
-  if (game.intel.map[row] && game.intel.map[row][col + 1]) {
-    neighbors.push(makeLocationObject({locationIdx: row * game.mapWidth + (col + 1), game}))
+  if (game.locationObjectMap[row] && game.locationObjectMap[row][col + 1]) {
+    neighbors.push(game.locationObjectMap[row][col + 1])
   }
   return neighbors
 }
@@ -29,8 +32,8 @@ function findPath({location, targetLocation, game}) {
   if (!game) {
     throw new Error("This function needs game context to work")
   }
-  targetLocation = typeof targetLocation == "number" ? makeLocationObject({locationIdx : targetLocation, game}) : targetLocation
-  location = typeof target == "number" ? makeLocationObject({locationIdx : location, game}) : location
+  targetLocation = typeof targetLocation == "number" ? getLocationObject({locationIdx: targetLocation, game}) : targetLocation
+  location = typeof target == "number" ? getLocationObject({locationIdx: location, game}) : location
   // TODO avoid cities option
   let pathIndexes = []
   if (location && targetLocation) {
@@ -76,6 +79,8 @@ function createDistanceMap({location, game}) {
   if (!game) {
     throw new Error("This function needs game context to work")
   }
+  // accept location or locationIdx
+  location = typeof target == "number" ? getLocationObject({locationIdx: location, game}) : location
   const distanceMap = []
   const queue = [location]
   distanceMap[location.idx] = 0
@@ -101,22 +106,14 @@ function createDistanceMap({location, game}) {
   return distanceMap
 }
 
-function makeLocationObject({locationIdx, game}) {
+// const row = Math.floor(idx / this.game.mapWidth)
+// const col = idx % this.game.mapWidth
+// const index = row * this.game.mapWidth + col
+function getLocationObject({locationIdx, game}) {
   if (!game) {
     throw new Error("This function needs game context to work")
   }
-  const terrain = game.terrain[locationIdx]
-  return {
-    idx: locationIdx,
-    armies: game.armies[locationIdx],
-    terrain: terrain,
-    isMine: terrain === game.playerIndex,
-    isTeam: game.teams[terrain] === game.team,
-    attackable: terrain === TERRAIN_EMPTY || (terrain > TERRAIN_EMPTY && terrain !== game.playerIndex && game.teams[terrain] !== game.team),
-    isCity: game.knownCities.includes(locationIdx),
-    isGeneral: game.opponents.some(opponent => opponent.generalLocationIndex && opponent.generalLocationIndex === locationIdx && !opponent.dead),
-    distanceFromGeneral: game.intel.distanceMapFromGeneral[locationIdx]
-  }
+  return game.locationObjectMap[Math.floor(locationIdx / game.mapWidth)][locationIdx % game.mapWidth]
 }
 
 function makeAttackQueueObject({mode, attacker, target, sendHalf, priority}) {
@@ -147,16 +144,13 @@ module.exports = {
   TERRAIN_FOG,      // empty or swamp or occupied
   TERRAIN_FOG_MTN,  // city or mnt
 
-  findNeighbors,
-  findPath,
-  findShortestPath,
+  findNeighbors, findPath, findShortestPath,
 
   // maps
   createDistanceMap,
 
   // object
-  makeLocationObject,
-  makeAttackQueueObject,
+  getLocationObject, makeAttackQueueObject,
 
   // logic
   getArmyAttackDiff,

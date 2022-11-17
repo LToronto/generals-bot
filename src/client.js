@@ -29,6 +29,11 @@ const COLOR_MAP = [
 	'LAVENDER',
 ]
 
+const TERRAIN_EMPTY = -1    // empty or city or enemy
+const TERRAIN_MTN = -2      // viewable mountain
+const TERRAIN_FOG = -3     // empty or swamp or occupied
+const TERRAIN_FOG_MTN = -4 // city or mnt
+
 export function ForceStart () {
 	setTimeout(()=> {
 		forceStartFlag = !forceStartFlag
@@ -178,6 +183,8 @@ socket.on("game_start", function(startData) {
 		socket,
 		chatRoom: null,
 		map: [],
+		locations: [],
+		locationObjectMap: [],
 		generals: [], // The indices of generals we know of.
 		cities: [], // The indices of cities we have vision of.
 		knownCities: [], // city indices that may or may not be currently visible.
@@ -350,6 +357,33 @@ socket.on("game_update", function(updateData) {
 	game.cities = game.cities.filter((cityLocationIndex) => {
 		return game.terrain[cityLocationIndex] !== game.playerIndex
 	}) // Remove self-owned cities from city list.
+
+	function makeLocationObject(locationIdx) {
+		const terrain = game.terrain[locationIdx]
+		game.locations[locationIdx] = {
+			idx: locationIdx,
+			armies: game.armies[locationIdx],
+			terrain: terrain,
+			isMine: terrain === game.playerIndex,
+			isTeam: game.teams[terrain] === game.team,
+			attackable: terrain === TERRAIN_EMPTY || (terrain > TERRAIN_EMPTY && terrain !== game.playerIndex && game.teams[terrain] !== game.team),
+			isCity: game.knownCities.includes(locationIdx),
+			isGeneral: game.opponents.some(opponent => opponent.generalLocationIndex && opponent.generalLocationIndex === locationIdx && !opponent.dead),
+		}
+		return game.locations[locationIdx]
+	}
+
+	// Loop through map array once, and sort all data appropriately.
+	// const row = Math.floor(idx / this.game.mapWidth)
+	// const col = idx % this.game.mapWidth
+	// const index = row * this.game.mapWidth + col
+	for (let row = 0; row < Math.floor(game.terrain.length / game.mapWidth); row++) {
+		game.locationObjectMap[row] = []
+		for (let column = 0; column <= (game.terrain.length - 1) % game.mapWidth; column++) {
+			const locationIdx = row * game.mapWidth + column
+			game.locationObjectMap[row][column] = makeLocationObject(locationIdx)
+		}
+	}
 
 	game.turn = updateData.turn
 

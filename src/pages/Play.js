@@ -56,7 +56,7 @@ export default function Play({ match }) {
           <Select
             placeholder="Bot Variant"
             size="small"
-            options={['MurderBot', 'EnigmaBot']}
+            options={['MurderBot', 'EnigmaBot', "NotWorthItBot"]}
             value={botVariantValue}
             onChange={({option}) => handleBotVariantChange(option)}
           />
