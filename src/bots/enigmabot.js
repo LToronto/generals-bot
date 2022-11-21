@@ -1,5 +1,6 @@
 import {createDistanceMap, findPath, findNeighbors, getLocationObject, makeAttackQueueObject} from './botUtils'
 import {TERRAIN_EMPTY, TERRAIN_FOG} from './botUtils'
+import {addGameLog} from "../client";
 /**
  * This bot randomly moves its largest army to a random foggy location
  *
@@ -15,6 +16,7 @@ const ai = {
     attackQueue: [],
     opponents: [],
     myScore: {total: 0, tiles: 0, lostArmies: false, lostTerritory: false},
+    behindInLand : false,
     myGeneral : {},
     myTopArmies: [], // The map locations we own and have a minimum number of armies available.
     emptyTerritories: [], // The map locations we can see that are free to conquer.
@@ -43,7 +45,7 @@ const ai = {
       // AS LONG AS FOREIGN POLICY DOES NOT DRAMATICALLY CHANGE, WORK THROUGH FIFO QUEUE OF MOVES
       const currentMove = this.intel.attackQueue.shift()
       const moveInfo = `TURN ${this.game.turn}: ${currentMove.mode}: ${currentMove.attackerIndex} --> ${currentMove.targetIndex} ${(currentMove.sendHalf) ? ' (HALF)' : ''}`
-      document.getElementById("log").append(`\n${moveInfo}`)
+      addGameLog(`${moveInfo}`)
       this.intel.log.unshift({mode: currentMove.mode, attackerIndex: currentMove.attackerIndex, targetIndex: currentMove.targetIndex}) // push to front of log array--returns new length
       this.intel.log.length = 5
       this.game.socket.emit("attack", currentMove.attackerIndex, currentMove.targetIndex, currentMove.sendHalf)
@@ -61,27 +63,24 @@ const ai = {
     }
 
     // Clear the queue if the next action no longer makes sense
-    if (this.intel.attackQueue.length > 0 ) {
-      const nextAttacker = getLocationObject({ locationIdx : this.intel.attackQueue[0].attackerIndex, game : this.game })
-      const nextTarget = getLocationObject({ locationIdx : this.intel.attackQueue[0].targetIndex, game : this.game })
-      if (!nextAttacker.isMine || nextAttacker.armies < 2 || (nextAttacker.armies-1 <= nextTarget.armies && !nextTarget.isMine && this.intel.attackQueue[0].priority < 10)) {
+    if (this.intel.attackQueue.length > 0) {
+      const nextAttacker = getLocationObject({locationIdx: this.intel.attackQueue[0].attackerIndex, game: this.game})
+      const nextTarget = getLocationObject({locationIdx: this.intel.attackQueue[0].targetIndex, game: this.game})
+      if (!nextAttacker.isMine || nextAttacker.armies < 2 || (nextAttacker.armies - 1 <= nextTarget.armies && !nextTarget.isMine && this.intel.attackQueue[0].priority < 10)) {
         this.intel.attackQueue = []
       }
     }
 
     // Take the general instead of current action
     if (this.intel.attackQueue.length > 0 && this.intel.attackQueue[0].priority < 100) {
-      const nextAttacker = getLocationObject({locationIdx : this.intel.attackQueue[0].attackerIndex, game : this.game})
-      const neighbors = findNeighbors({location : nextAttacker, game : this.game})
-      for(let n = 0; n<neighbors.length; n++) {
-        if(neighbors[n].attackable && nextAttacker.armies > neighbors[n].armies+1 && neighbors[n].isGeneral) {
+      const nextAttacker = getLocationObject({locationIdx: this.intel.attackQueue[0].attackerIndex, game: this.game})
+      const neighbors = findNeighbors({location: nextAttacker, game: this.game})
+      for (let n = 0; n < neighbors.length; n++) {
+        if (neighbors[n].attackable && nextAttacker.armies > neighbors[n].armies + 1 && neighbors[n].isGeneral) {
           //Clear the queue and make this the thing to do
           this.intel.attackQueue = []
           this.intel.attackQueue.push(makeAttackQueueObject({
-            mode: "oopsIFoundYou",
-            attacker: nextAttacker,
-            target: neighbors[n],
-            priority: 100
+            mode: "oopsIFoundYou", attacker: nextAttacker, target: neighbors[n], priority: 100
           }))
           break //Only queue one for each attacker
         }
@@ -89,10 +88,9 @@ const ai = {
     }
 
     // seek and destroy generals
-    if((this.intel.attackQueue.length > 0 && this.intel.attackQueue[0].priority < 10) || this.intel.attackQueue.length === 0){
-      for(let n = 0; n<this.game.opponents.length; n++) {
-        if (this.game.opponents[n] && typeof this.game.opponents[n].generalLocationIndex !== 'undefined'
-          && this.game.opponents[n].generalLocationIndex > -1 && !this.game.opponents[n].dead && !this.game.opponents[n].isTeam) {
+    if ((this.intel.attackQueue.length > 0 && this.intel.attackQueue[0].priority < 10) || this.intel.attackQueue.length === 0) {
+      for (let n = 0; n < this.game.opponents.length; n++) {
+        if (this.game.opponents[n] && typeof this.game.opponents[n].generalLocationIndex !== 'undefined' && this.game.opponents[n].generalLocationIndex > -1 && !this.game.opponents[n].dead && !this.game.opponents[n].isTeam) {
           this.intel.attackQueue = []
           this.queuePathToTarget(this.intel.myArmies[0], this.game.opponents[n].generalLocationIndex, "SeekAndDestroy", 10)
           break
@@ -102,17 +100,17 @@ const ai = {
 
     // Check current low priority attacker and take the city instead of current action
     if (this.intel.attackQueue.length > 0 && this.intel.attackQueue[0].priority < 1) {
-      const nextAttacker = getLocationObject({ locationIdx : this.intel.attackQueue[0].attackerIndex, game : this.game })
-      const neighbors = findNeighbors({ location :nextAttacker, game : this.game })
-      for(let n = 0; n<neighbors.length; n++) {
-        if(neighbors[n].attackable && nextAttacker.armies > neighbors[n].armies+1 && neighbors[n].isCity) {
+      const nextAttacker = getLocationObject({locationIdx: this.intel.attackQueue[0].attackerIndex, game: this.game})
+      const neighbors = findNeighbors({location: nextAttacker, game: this.game})
+      for (let n = 0; n < neighbors.length; n++) {
+        if (neighbors[n].attackable && nextAttacker.armies > neighbors[n].armies + 1 && neighbors[n].isCity) {
           //Clear the queue and make this the thing to do
           this.intel.attackQueue = []
           this.intel.attackQueue.push(makeAttackQueueObject({
             mode: "CityPriority",
             attacker: nextAttacker,
             target: neighbors[n],
-            sendHalf: nextAttacker.armies/2 > neighbors[n].armies+1,
+            sendHalf: nextAttacker.armies / 2 > neighbors[n].armies + 1,
             priority: 1
           }))
           break //Only queue one for each attacker
@@ -120,14 +118,13 @@ const ai = {
       }
     }
 
-    // TODO only do this if player is not ahead of close.
-    if (this.intel.attackQueue.length < 1) {
+    // only do this if player is not ahead in land.
+    if (this.intel.attackQueue.length < 1 && (this.game.myScore.tiles < 50 || this.intel.behindInLand || this.game.turn%50>40)) {
       this.queueEasyWins(this.intel.myTopArmies)
     }
 
-    // TODO only do this if player is not ahead of close.
     // Don't queue up new stuff if there is stuff to do.
-    if (this.intel.attackQueue.length < 1 && this.intel.visibleOpponentTerritories.length > 0) {
+    if (this.intel.attackQueue.length < 1 && this.intel.visibleOpponentTerritories.length > 0 && (this.game.myScore.tiles < 50 || this.intel.behindInLand || this.game.turn%50>40)) {
       // move largest army to random enemy Territory
       const random = Math.floor(Math.random() * this.intel.visibleOpponentTerritories.length)
       const attacker = this.intel.myArmies[0] // largest army
@@ -138,22 +135,22 @@ const ai = {
     }
 
     // Don't queue up new stuff if there is stuff to do.
-    if (this.intel.attackQueue.length < 1) {
+    if (this.intel.attackQueue.length < 1 && this.intel.visibleOpponentTerritories.length > 0) {
       // move largest army to random enemy Territory
       const random = Math.floor(Math.random() * this.intel.visibleOpponentTerritories.length)
       this.queuePathToTarget(this.intel.myArmies[0], this.intel.visibleOpponentTerritories[random], "AttackBoarder")
     }
 
     // Don't queue up new stuff if there is stuff to do.
-    if (this.intel.attackQueue.length < 1) {
+    if (this.intel.attackQueue.length < 1 && this.intel.foggedTerritories.length > 0) {
       // move largest army to random empty Territory
       const random = Math.floor(Math.random() * this.intel.foggedTerritories.length)
       this.queuePathToTarget(this.intel.myArmies[0], this.intel.foggedTerritories[random], "RandomEmpty")
     }
   },
 
-  queuePathToTarget: function(attacker, targetLocation, mode, priority){
-    const nextMoveLocations = findPath({location: attacker, targetLocation, game : this.game})
+  queuePathToTarget: function(attacker, targetLocation, mode, priority, noCities){
+    const nextMoveLocations = findPath({location: attacker, targetLocation, game : this.game, noCities})
     for (let i = nextMoveLocations.length - 1; i > 0; i--) {
       this.intel.attackQueue.push(makeAttackQueueObject({
         mode: mode || "SelectedPathToTarget",
@@ -224,6 +221,14 @@ const ai = {
         this.intel.unexploredTerritories.delete(idx)
         if (this.game.armies[idx] > 1) {
           this.intel.totalAvailableArmyPower += this.game.armies[idx] - 1
+        }
+      }
+    }
+
+    if(this.game.opponents.length < 0 ) {
+      for (let i = 0; i < this.game.opponents.length; i++) {
+        if (this.game.opponents[i].tiles > this.game.myScore.tiles) {
+          this.intel.behindInLand = true
         }
       }
     }

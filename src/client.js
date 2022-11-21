@@ -1,17 +1,20 @@
 import io from 'socket.io-client'
 import MurderBot from './bots/murderbot'
 import EnigmaBot from './bots/enigmabot'
+import FinderBot from './bots/finderBot'
 import NotWorthItBot from './bots/notWorthItBot'
 import config from './config'
 
 let forceStartFlag = false
 let game = {}
 let ai
+let gameLog=""
 
 const BOT_MAP = {
 	"MurderBot": MurderBot,
 	"EnigmaBot": EnigmaBot,
 	"NotWorthItBot": NotWorthItBot,
+	"FinderBot": FinderBot,
 }
 
 const COLOR_MAP = [
@@ -34,17 +37,25 @@ const TERRAIN_MTN = -2      // viewable mountain
 const TERRAIN_FOG = -3     // empty or swamp or occupied
 const TERRAIN_FOG_MTN = -4 // city or mnt
 
+
+export function addGameLog(textLine) {
+	//document.getElementById("log").append(`\n${textLine}`)
+	gameLog =`${textLine}\n` + gameLog
+	document.getElementById("log").innerHTML = gameLog
+}
+
 export function ForceStart () {
 	setTimeout(()=> {
 		forceStartFlag = !forceStartFlag
-		document.getElementById("log").append("\nToggled force_start: " + forceStartFlag)
+		addGameLog(`Toggled force_start: ${forceStartFlag}`)
 		socket.emit('set_force_start', config.GAME_ID, forceStartFlag)
 	}, 100) // Keep from firing join and force_start events simultaneously
 }
 
 export function Join (userID, username) {
-	document.getElementById("log").innerHTML = "Connected to lobby: " + config.GAME_ID
-	document.getElementById("log").append(`\nJoined custom game at http://bot.generals.io/games/${encodeURIComponent(config.GAME_ID)}`)
+	gameLog = "Connected to lobby: " + config.GAME_ID;
+	document.getElementById("log").innerHTML = gameLog
+	addGameLog(`Joined custom game at http://bot.generals.io/games/${encodeURIComponent(config.GAME_ID)}`)
 	socket.emit('join_private', config.GAME_ID, userID)
 
 	// When you're ready, you can have your bot join other game modes.
@@ -61,8 +72,8 @@ export function Join (userID, username) {
 }
 
 export function Quit () {
-	document.getElementById("log").append("\nReplay:\n" + game.replay_url)
-	document.getElementById("log").append("\nGame over. Halting execution until next game begin.")
+	addGameLog(`Replay: ${game.replay_url}`)
+	addGameLog(`Game over. Halting execution until next game begin.`)
 	game.gameOver = true
 	forceStartFlag = false
 	socket.emit('leave_game') // Leave active game
@@ -71,16 +82,16 @@ export function Quit () {
 
 export function Team (gameId, team) {
 	socket.emit('set_custom_team', gameId, team)
-	document.getElementById("log").append(`\nTeam ${team} joined`)
+	addGameLog(`Team ${team} joined`)
 }
 
 export function ChooseBotVariant (botVariant) {
 	if (BOT_MAP[botVariant]) {
 		ai = BOT_MAP[botVariant]
-		document.getElementById("log").append(`\n${botVariant} selected`)
+		addGameLog(`${botVariant} selected`)
 	} else {
 		ai = BOT_MAP.MurderBot
-		document.getElementById("log").append(`\nUnrecognized bot variant '${botVariant}' selected. Defaulting to MurderBot`)
+		addGameLog(`Unrecognized bot variant '${botVariant}' selected. Defaulting to MurderBot`)
 	}
 }
 
@@ -144,7 +155,7 @@ function sendVoiceLine (messageType) {
 
 // This happens on socket timeout, or after leaving the window open while letting the computer go to sleep.
 socket.on('disconnect', function() {
-	document.getElementById("log").append("\nGame disconnected.")
+	addGameLog(`Game disconnected.`)
 })
 
 socket.on('connect', function() {
@@ -154,14 +165,14 @@ socket.on('connect', function() {
 })
 
 socket.on('game_lost', () => {
-	document.getElementById("log").append("\nGame lost...disconnecting.\nClick Join Game to rejoin for a rematch.")
+	addGameLog(`Game lost...disconnecting.\nClick Join Game to rejoin for a rematch.`)
 
 	sendVoiceLine('FAILURE')
 	Quit()
 })
 
 socket.on('game_won', () => {
-	document.getElementById("log").append("\nGame won!")
+	addGameLog(`Game won!`)
 
 	sendVoiceLine('SUCCESS')
 	Quit()
@@ -177,7 +188,7 @@ socket.on('game_won', () => {
  */
 socket.on("game_start", function(startData) {
 	// TODO: Take teammates from startData.teams into account & keep separate from opponents
-  document.getElementById("log").append(`\nGame starting...`)
+	addGameLog(`Game starting...`)
 	// Initialize/Re-initialize game state used by both bot and client.
 	game = {
 		socket,
@@ -208,12 +219,12 @@ socket.on("game_start", function(startData) {
 	game.playerIndex = startData.playerIndex
 
   game.replay_url = "http://bot.generals.io/replays/" + encodeURIComponent(startData.replay_id)
-	document.getElementById("log").append(`\nGame starting! The replay will be available after the game at ${game.replay_url}`)
+	document.getElementById("log").insertAdjacentText("beforebegin", `Game starting! The replay will be available after the game at ${game.replay_url}\n`)
 	game.teams = startData.teams
 	game.team = startData.teams[startData.playerIndex]
 
 	const startDataString = JSON.stringify(startData.teams)
-	document.getElementById("log").append(`\nteams: ${startDataString}`)
+	addGameLog(`teams: ${startDataString}`)
 	game.usernames = startData.usernames
 	game.chatRoom = startData.chat_room
 
@@ -312,6 +323,7 @@ socket.on("game_update", function(updateData) {
 			// adjust for remaining land
 			gatherableArmies = gatherableArmies = (score.tiles%50)*(landSetsOfFifty+1)
 			game.opponents[score.i] = {
+				idx: score.i,
 				color: COLOR_MAP[score.color],
 				dead: score.dead,
 				tiles: score.tiles,

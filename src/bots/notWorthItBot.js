@@ -1,5 +1,6 @@
 import {createDistanceMap, findPath, findNeighbors, getLocationObject, makeAttackQueueObject} from './botUtils'
 import {TERRAIN_EMPTY, TERRAIN_FOG} from './botUtils'
+import {addGameLog} from "../client";
 /**
  * This bot expands and pulls all other armies back to the general
  *
@@ -33,7 +34,7 @@ let ai = {
       // AS LONG AS FOREIGN POLICY DOES NOT DRAMATICALLY CHANGE, WORK THROUGH FIFO QUEUE OF MOVES
       let currentMove = this.intel.attackQueue.shift()
       let moveInfo = `TURN ${this.game.turn}: ${currentMove.mode}: ${currentMove.attackerIndex} --> ${currentMove.targetIndex} ${(currentMove.sendHalf) ? ' (HALF)' : ''}`
-      document.getElementById("log").append(`\n${moveInfo}`)
+      addGameLog(`${moveInfo}`)
       this.intel.log.unshift({mode: currentMove.mode, attackerIndex: currentMove.attackerIndex, targetIndex: currentMove.targetIndex}) // push to front of log array--returns new length
       this.intel.log.length = 5
       this.game.socket.emit("attack", currentMove.attackerIndex, currentMove.targetIndex, currentMove.sendHalf)

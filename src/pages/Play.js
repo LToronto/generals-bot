@@ -1,4 +1,4 @@
-import React, {useState} from "react";
+import React, {useRef, useState} from "react";
 import { ForceStart, Join, Quit, Team, ChooseBotVariant } from "../../src/client.js";
 import { Button, Box, Select } from "grommet";
 import config from '../config'
@@ -23,6 +23,11 @@ export default function Play({ match }) {
     setBotVariantValue(option);
     ChooseBotVariant(option);
   }
+  const messagesEndRef = useRef(null)
+
+  const scrollToBottom = () => {
+    messagesEndRef.current.scrollIntoView({ behavior: "smooth" })
+  }
 
   setTimeout(() => {
     Join(bot.id, bot.name);
@@ -39,13 +44,13 @@ export default function Play({ match }) {
               ForceStart();
             }}
             label="Force Start"
-          ></Button>
+          />
           <Button
             onClick={() => {
               Join(bot.id, bot.name);
             }}
             label="Join Game"
-          ></Button>
+          />
           <Select
             placeholder="Team"
             size="small"
@@ -56,7 +61,7 @@ export default function Play({ match }) {
           <Select
             placeholder="Bot Variant"
             size="small"
-            options={['MurderBot', 'EnigmaBot', "NotWorthItBot"]}
+            options={['MurderBot', 'EnigmaBot', "NotWorthItBot", "FinderBot"]}
             value={botVariantValue}
             onChange={({option}) => handleBotVariantChange(option)}
           />
@@ -65,14 +70,15 @@ export default function Play({ match }) {
               Quit();
             }}
             label="Quit"
-          ></Button>
+          />
         </div>
       </Box>
 
-      <Box>
+      <Box onChange={() => scrollToBottom()}>
         <pre id="log" style={{"backgroundColor": "#eee", "maxHeight": "50vh", "minHeight": "6em", "overflow": "scroll"}}>
           Connected to lobby: {config.GAME_ID}
         </pre>
+        <div ref={messagesEndRef} />
       </Box>
     </>
   );
